@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+require "psqlversions/cli"
+
+Psqlversions::CLI.start
