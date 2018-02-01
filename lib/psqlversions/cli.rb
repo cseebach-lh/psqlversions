@@ -1,44 +1,36 @@
+require 'open3'
 require 'thor'
 require 'psqlversions'
-require 'open3'
 
 module Psqlversions
+  # The main class for the command-line interface
   class CLI < Thor
     desc 'list', 'list all local databases'
     def list
-      list_dbs.each {|db| puts db}
+      list_dbs.each { |db| puts db }
     end
 
     desc 'copy {from} {to}', 'create a copy of a local database'
     def copy(from, to)
       _stdout, stderr, status = Open3.capture3('createdb', "-T#{from}", to)
-      if status != 0 then
-        puts "error when copying: #{stderr}"
-      end
+      puts "error when copying: #{stderr}" if status != 0
     end
 
-    desc 'checkpoint {checkpointable} tag', 'create a checkpoint for a local db'
-    def checkpoint(db_to_checkpoint, checkpoint_base_name)
-      next_checkpoint = build_checkpoint_name(
-        checkpoint_base_name,
-        last_checkpoint(checkpoint_base_name) + 1
-      )
-      copy(db_to_checkpoint, next_checkpoint)
+    desc 'checkpoint {local_db} {tag}', 'create a checkpoint for a local db'
+    def checkpoint(db, tag)
+      next_checkpoint = build_checkpoint_name(tag, last_checkpoint(tag) + 1)
+      copy(db, next_checkpoint)
     end
 
     private
 
     def last_checkpoint(checkpoint_base)
-      last = 0
-      list_dbs.each do |db_name|
-        starts_with_base = db_name.start_with? checkpoint_base
-        ends_with_number = db_name.sub(checkpoint_base, '') =~ /-\d+/
-        if starts_with_base && ends_with_number
-          suffix = db_name.sub checkpoint_base, ''
-          last = [suffix.gsub(/[^\d]/, '').to_i, last].max
-        end
-      end
-      last
+      points = list_dbs.select { |db| db.start_with? checkpoint_base }
+                       .map { |db| db.sub checkpoint_base, '' }
+                       .select { |suffix| suffix =~ /-\d+/ }
+                       .map { |suffix| suffix[1..-1].to_i }
+
+      (points + [0]).max
     end
 
     def build_checkpoint_name(checkpoint_base_name, next_checkpoint)
@@ -46,17 +38,12 @@ module Psqlversions
     end
 
     def list_dbs
-      stdout, _status = Open3.capture2('psql', '--list')
+      stdout, status = Open3.capture2('psql', '--list')
+      return [] if status != 0
 
-      dbs = []
-      stdout.each_line.drop(3).each do |line|
-        db, _user, _encoding, _collate, _ctype, _privileges = line.split('|')
-        db = db.strip
-        unless db.empty? || db =~ /\(.*\)/
-          dbs << db
-        end
-      end
-      dbs
+      stdout.each_line.drop(3)
+            .map { |line| line.split('|')[0].strip }
+            .reject { |db| db.empty? || db =~ /\(.*\)/ }
     end
   end
 end
