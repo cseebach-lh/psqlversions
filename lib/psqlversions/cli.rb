@@ -9,9 +9,9 @@ module Psqlversions
   class CLI < Thor
     desc 'list', 'list all local databases'
     def list
-      with_preferences_db do |db|
+      with_protect_db do |protections_db|
         rows = list_dbs.each.map do |local_db_name|
-          [local_db_name, db[local_db_name] == 'protected' ? 'protected' : '']
+          [local_db_name, protections_db[local_db_name] == 'protected' ? 'protected' : '']
         end
 
         puts Terminal::Table.new(headings: %w[Database Protected?], rows: rows)
@@ -20,8 +20,8 @@ module Psqlversions
 
     desc 'drop {local_db}', 'drop a local database (following protection flags)'
     def drop(local_db_name)
-      with_preferences_db do |db|
-        if db[local_db_name] == 'protected'
+      with_protect_db do |protections_db|
+        if protections_db[local_db_name] == 'protected'
           puts "#{local_db_name} is protected and I won't drop it."
         else
           _stdout, stderr, status = Open3.capture3('dropdb', local_db_name)
@@ -44,21 +44,21 @@ module Psqlversions
 
     desc 'protect {local_db}', 'prevent psqlversions from dropping a local db'
     def protect(local_db_name)
-      with_preferences_db do |db|
-        db.set! local_db_name, 'protected'
+      with_protect_db do |protections_db|
+        protections_db.set! local_db_name, 'protected'
       end
     end
 
     desc 'unprotect {local_db}', 'allow psqlversions to drop a local db'
     def unprotect(local_db_name)
-      with_preferences_db do |db|
-        db.set! local_db_name, 'unprotected'
+      with_protect_db do |protections_db|
+        protections_db.set! local_db_name, 'unprotected'
       end
     end
 
     private
 
-    def with_preferences_db
+    def with_protect_db
       db = Daybreak::DB.new "#{Dir.home}/.psqlversions.db"
       yield(db)
       db.close
