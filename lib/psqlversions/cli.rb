@@ -1,5 +1,7 @@
 require 'open3'
 require 'thor'
+require 'daybreak'
+require 'terminal-table'
 require 'psqlversions'
 
 module Psqlversions
@@ -7,7 +9,25 @@ module Psqlversions
   class CLI < Thor
     desc 'list', 'list all local databases'
     def list
-      list_dbs.each { |db| puts db }
+      with_preferences_db do |db|
+        rows = list_dbs.each.map do |local_db_name|
+          [local_db_name, db[local_db_name] == 'protected' ? 'protected' : '']
+        end
+
+        puts Terminal::Table.new(headings: %w[Database Protected?], rows: rows)
+      end
+    end
+
+    desc 'drop {local_db}', 'drop a local database (following protection flags)'
+    def drop(local_db_name)
+      with_preferences_db do |db|
+        if db[local_db_name] == 'protected'
+          puts "#{local_db_name} is protected and I won't drop it."
+        else
+          _stdout, stderr, status = Open3.capture3('dropdb', local_db_name)
+          puts "error when dropping: #{stderr}" if status != 0
+        end
+      end
     end
 
     desc 'copy {from} {to}', 'create a copy of a local database'
@@ -22,7 +42,27 @@ module Psqlversions
       copy(db, next_checkpoint)
     end
 
+    desc 'protect {local_db}', 'prevent psqlversions from dropping a local db'
+    def protect(local_db_name)
+      with_preferences_db do |db|
+        db.set! local_db_name, 'protected'
+      end
+    end
+
+    desc 'unprotect {local_db}', 'allow psqlversions to drop a local db'
+    def unprotect(local_db_name)
+      with_preferences_db do |db|
+        db.set! local_db_name, 'unprotected'
+      end
+    end
+
     private
+
+    def with_preferences_db
+      db = Daybreak::DB.new "#{Dir.home}/.psqlversions.db"
+      yield(db)
+      db.close
+    end
 
     def last_checkpoint(checkpoint_base)
       points = list_dbs.select { |db| db.start_with? checkpoint_base }

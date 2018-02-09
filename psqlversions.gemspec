@@ -33,4 +33,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rspec", "~> 3.0"
 
   spec.add_runtime_dependency "thor"
+  spec.add_runtime_dependency "daybreak"
+  spec.add_runtime_dependency "terminal-table"
 end
