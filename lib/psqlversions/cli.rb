@@ -11,7 +11,8 @@ module Psqlversions
     def list
       with_protect_db do |protections_db|
         rows = list_dbs.each.map do |local_db_name|
-          [local_db_name, protections_db[local_db_name] == 'protected' ? 'protected' : '']
+          protected = protections_db[local_db_name] == 'protected'
+          [local_db_name, protected ? 'protected' : '']
         end
 
         puts Terminal::Table.new(headings: %w[Database Protected?], rows: rows)
