@@ -1,39 +1,103 @@
-# Postgres::Local::Versions
+# Psqlversions
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/postgres/local/versions`. To experiment with that code, run `bin/console` for an interactive prompt.
+Does maintaining the right database state when you're attempting to reproduce or fix a production problem get you down?
 
-TODO: Delete this and the text above, and describe your gem
+Me too. I built this gem to help manage lots of Postgres databases a little more easily. Here's a use case:
 
-## Installation
-
-Add this line to your application's Gemfile:
-
-```ruby
-gem 'psqlversions'
+```bash
+# you get a request for production support on issue 123
+# you have a dump of relevant production data
+# you have a development database
+# what are all of them called again?
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      | protected  |
+| development_dev           |            |
++---------------------------+------------+
+#
+# that's right, I have a dump from Feb 9. that will be my starting point
+:~ cseebach$ psqlversions drop development_dev
+:~ cseebach$ psqlversions copy data_dump_2018_02_08 development_dev
+#
+# run any migration steps to bring your schema current, then checkpoint
+:~ cseebach$ psqlversions checkpoint development_dev issue_123
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      | protected  |
+| development_dev           |            |
+| issue_123-001             |            |
++---------------------------+------------+
+# 
+# bring your database state into the next state you want to test
+# test it
+# checkpoint
+:~ cseebach$ psqlversions checkpoint development_dev issue_123
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      | protected  |
+| development_dev           |            |
+| issue_123-001             |            |
+| issue_123-002             |            |
++---------------------------+------------+
 ```
 
-And then execute:
+That's how it works right now. If that's interesting to you, installation is quick and easy.
 
-    $ bundle
+# Installation
 
-Or install it yourself as:
+`gem install psqlversions`
 
-    $ gem install postgres-local-versions
+# Other commands
 
-## Usage
+See `psqlversions help` for more information about available commands, in addition to the below.
 
-TODO: Write usage instructions here
+### Protect and Unprotect
 
-## Development
+If you're like me, you forget about which databases are important not to delete. psqlversions allows you to set flags
+that it can follow when you use it to manage your databases.
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/postgres-local-versions. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
-
-## Code of Conduct
-
-Everyone interacting in the Postgres::Local::Versions project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/postgres-local-versions/blob/master/CODE_OF_CONDUCT.md).
+```bash
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      | protected  |
+| development_dev           |            |
+| issue_123-001             |            |
+| issue_123-002             |            |
++---------------------------+------------+
+#
+# try dropping an unprotected database
+:~ cseebach$ psqlversions drop issue_123-002
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      | protected  |
+| development_dev           |            |
+| issue_123-001             |            |
++---------------------------+------------+
+#
+# try dropping a protected database
+:~ cseebach$ psqlversions drop data_dump_2018_02_08
+data_dump_2018_02_08 is protected and I won't drop it.
+# 
+# try protecting a database
+# try unprotecting a database
+:~ cseebach$ psqlversions protect development_dev
+:~ cseebach$ psqlversions unprotect data_dump_2018_02_08
+:~ cseebach$ psqlversions list
++---------------------------+------------+
+| Database                  | Protected? |
++---------------------------+------------+
+| data_dump_2018_02_08      |            |
+| development_dev           | protected  |
+| issue_123-001             |            |
++---------------------------+------------+
+```
